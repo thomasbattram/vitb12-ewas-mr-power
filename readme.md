@@ -1,5 +1,7 @@
 # VitB12 - DNAm MR power calculations
 
+Report can be found in [report/report.html](report/report.html).
+
 Data needed to run the analyses:
 
 1. EWAS results (`MA.b12.maternal.main.model.GSM.no.MARBLES.csv` and `MA.b12.newborn.main.model.GSM.csv`)
@@ -16,10 +18,10 @@ Data needed to run the analyses:
 
 ### Install packages needed
 
-`
+```
 if (!require(attachment)) install.packages("attachment")
 pkgs_from_script <- att_from_rscripts(path = "scripts")
 pkgs_from_report <- att_from_rmds(path = "report", inside_rmd = TRUE)
 pkgs <- c(pkgs_from_script, pkgs_from_report)
 lapply(pkgs, function(pkg) {if (!require(pkg, character.only = T)) install.packages(pkg)})
-`
+```
