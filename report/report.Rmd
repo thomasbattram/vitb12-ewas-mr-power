@@ -1,0 +1,150 @@
+---
+title: VitB12 - DNAm MR power calculations
+author: Thomas Battram
+output:
+  bookdown::html_document2:
+    toc: true
+    toc_float: true
+    theme: united
+    number_sections: false
+---
+
+```{r setup, message=FALSE, warning=FALSE, include=FALSE}
+
+## pkgs
+suppressWarnings(suppressPackageStartupMessages({
+library(bookdown) # extra markdown options
+library(knitr) # ...
+library(kableExtra) # extra nice tables
+library(tidyverse) # tidy code and data
+library(RColorBrewer) # for plotting colours
+library(readxl) # read in excel data - gwas data
+library(usefunc) # own package of useful functions
+}))
+
+knitr::opts_chunk$set(echo = FALSE, 
+           			  warning = FALSE, 
+            		  message = TRUE, 
+            		  cache = FALSE, 
+            		  dpi = 300 
+            		  )
+
+## function for table output
+make_table <- function(dat, cap = NULL)
+{
+    dat <- dat %>%
+        tidy_nums %>%
+        tidy_colnames
+    kbl(dat, caption = cap) %>% 
+        kable_styling() %>% 
+        scroll_box(width = "100%", height = "450px")
+}
+
+```
+
+```{r data, message=FALSE}
+onesmr <- new_load("../results/power-1smr.RData")
+maxpower_onesmr <- onesmr$power_res %>%
+    dplyr::filter(power == max(power))
+twosmr <- new_load("../results/power-2smr.RData")
+vitb12_gwas <- read_xlsx("../data/vitb12-gwas-data.xlsx")
+```
+
+## Background 
+
+Two EWAS were performed. One of maternal vitamin B12 levels and another of neonatal vitamin B12 levels, both measuring DNAm in cord blood. These EWAS identified `r nrow(onesmr$sample_res)` and `r nrow(twosmr$power_comb)` associations respectively (FDR < 0.05). To potentially improve causal inference for the associations, a Mendelian randomization analysis could be performed. This report looks to assess whether there is sufficient power to perform such analyses.
+
+This report is split into four main sections:
+
+1. Data used and processing of data
+2. Power in a one-sample MR setting using maternal vitamin B12 as the exposure
+3. Power in a two-sample MR setting using neonatal vitamin B12 as the exposure
+4. Limitations of these power analyses
+
+For sections 2 and 3, the power to detect an association in an MR context at the same magnitude as the observational associations is assessed.
+
+## Data
+
+For both studies GWAS of vitamin B12 from Grarup N et al. (N = 45,576) were used to identify suitable instruments. The study identified 11 genetic variants associated at 5x10^-8^ with vitamin B12 levels in a European population. To prevent double counting instruments and so artificially increasing precision, genetic variants in linkage disequilibrium (r^2^ > 0.001) were identified and the one with the weakest association was removed. No variants were in linkage disequilibrium so all were kept. A summary of the SNPs can be found in __Table \@ref(tab:vitb12-gwas-tab)__.
+
+```{r vitb12-gwas-tab, message=FALSE}
+get_se <- function(p, beta) abs(beta / qnorm(p/2))
+vitb12_gwas %>% 
+    mutate(bp_ens_GRCh36 = as.character(bp_ens_GRCh36), se = get_se(pval, beta)) %>%
+    dplyr::select(phenotype = Phenotype, units, SNP, chr, bp_ens_GRCh36, gene, effect_allele, other_allele, eaf, beta, se, pval) %>% 
+    make_table(cap = "Summary statistics for a GWAS of vitamin B12")
+```
+
+The combined variance explained (r^2^) of of the 11 SNPs was `r comma(twosmr$r2)` and the F-statistic for an instrument that combined all 11 SNPs (e.g. a GRS) was `r comma(twosmr$f_stat)`.
+
+For the two-sample MR, the first sample was assumed to be the vitamin B12 GWAS and the second sample was assumed to be GoDMC (N = roughly 25,000). 
+
+The [TwoSampleMR package](https://mrcieu.github.io/TwoSampleMR/) was used to help format some data and clump the exposure SNPs. All code for the analyses can be found here: [https://github.com/thomasbattram/vitb12-mr-power-calculations](https://github.com/thomasbattram/vitb12-ewas-mr-power).
+
+## One-sample MR
+
+Code was taken from the one-sample MR power calculator shiny application (https://shiny.cnsgenomics.com/mRnd/), which is based on the [Brion et al. 2013 publication](http://ije.oxfordjournals.org/content/42/5/1497.abstract). It was assumed that the instrument being used for the MR would be a genetic-risk score (GRS) for vitamin B12 formed from the 11 variants shown in __Table \@ref(tab:vitb12-gwas-tab)__. 
+
+The `r nrow(onesmr$sample_res)` CpG sites used for the one-sample MR power calculations were those that were identified in the EWAS of maternal vitamin B12 at FDR < 5%. 
+
+### Results
+
+At a sample size of 3000, the median power to detect the observational association using 1SMR was `r comma(median(onesmr$power_res[onesmr$power_res$n == 3000, "power"]))`. The greatest power was to detect an association between vitamin B12 and DNA methylation at `r maxpower_onesmr$cpg` (power = `r comma(maxpower_onesmr$power)`). The range of powers for each CpG site across sample sizes ranging from 1000 to 3000 are presented in __Figure \@ref(fig:power-onesmr)__. Full results can be seen in __Table \@ref(tab:power-onesmr-tab)__.
+
+(ref:power-onesmr-cap) __Range of powers in 1SMR__. The violin plot shows the range of powers to detect associations at least as large as the observational association across sample sizes for each DNA methylation site.
+
+(ref:power-onesmr-scap) Range of powers in 1SMR
+
+```{r power-onesmr, message=FALSE, results="asis", fig.cap='(ref:power-onesmr-cap)', fig.scap='(ref:power-onesmr-scap)'}
+ggplot(onesmr$power_res, aes(x = as.factor(n), y = power)) + 
+    geom_violin() + 
+    geom_jitter(width = 0.1) + 
+    labs(x = "sample size") + 
+    theme_bw()
+```
+
+```{r power-onesmr-tab}
+arrange(onesmr$power_res, desc(power)) %>%
+    make_table(cap = "Full power results for 1SMR")
+```
+
+
+
+The sample sizes required to estimate an effect at least as large as the observational associations at 80% power are presented in __Figure \@ref(fig:n-onesmr)__.
+
+```{r n-onesmr, message=FALSE, results="asis", fig.cap='Sample size required for 80% power in a one-sample MR setting'}
+ggplot(onesmr$sample_res, aes(x = "", y = n_required)) + 
+    geom_violin() + 
+    geom_jitter(width = 0.1) + 
+    labs(y = "sample size required for 80% power") +
+    theme_bw() + 
+    theme(axis.title.y = element_blank()) + 
+    coord_flip()
+```
+
+## Two-sample MR
+
+The same SNPs were used for the power calculation in the two-sample MR. The sample size was set to be 25000, which is roughly the sample size of the GoDMC consortium, but may vary depending on the CpG site.
+
+The `r nrow(twosmr$power_comb)` CpG sites used for the power calculations were those that were identified in the EWAS of neonatal vitamin B12 at FDR < 5%. 
+
+### Results
+
+Power to detect associations was very low (<5%). Results are presented in __Table \@ref(tab:power-twosmr-tab)__.
+
+```{r power-twosmr-tab}
+make_table(twosmr$power_comb, cap = "Full power results for 2SMR")
+```
+
+
+## Limitations
+
+### One-sample MR
+
+* The variance of DNAm was unknown. If the variance of DNAm in ARIES is not representative of the other cohorts in the meta-analysis then the power estimates will vary. 
+* The "confounded" (or unadjusted) effect estimates were set to be the effect estimates from the EWAS. It is likely the confounded estimates are further from the null (assuming the EWAS estimates provided were adjusted for confounders). If this is the case then there will be greater power in the 1SMR than reported here. However, unless the confounded estimates are greatly different to the adjusted effect estimates then the power increase will be minimal - e.g. if the estimates are 50% greater then the increase in power is roughly 1% for each CpG site.
+
+### Two-sample MR
+
+* The power estimates seem very low - it's odd they're much lower than the one-sample estimates. The code has been checked so I'm fairly confident in the results, but as 2SMR is fairly simple to run I think it might be worth just running a "rough" version to see if the estimates are as imprecise as this power analysis suggests. 
+
