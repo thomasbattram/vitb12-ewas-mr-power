@@ -53,7 +53,6 @@ calc_r2 <- function(b, eaf) 2 * b^2 * eaf * (1 - eaf)
 calc_f <- function(r2, n, k) r2 * (n - 1 - k) / ((1 - r2) * k) # k = number of snps
 
 ## Calculate power
-# need to double check this power calculation...
 calc_power_2smr <- function(n, r2, beta, alpha) pnorm(sqrt(n * r2) * beta - qnorm(1 - alpha / 2))
 
 # ------------------------------------------------------------------
